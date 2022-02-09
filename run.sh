@@ -1,15 +1,9 @@
 #!/bin/bash
 
-if [ ! -f /tmp/foo.txt ]; then
-    echo "Generating ssh keys"
-    ssh-keygen -q -t rsa -N '' -f /root/.ssh/id_rsa
-fi
-
-echo "starting tmate"
-tmate -S /tmp/tmate.sock new-session -d
-tmate -S /tmp/tmate.sock wait tmate-ready
-tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
-tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' 
-echo "started, sleeping"
-
-sleep infinity
+pkill -9 tmate
+wget -nc https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-static-linux-i386.tar.xz &> /dev/null
+tar --skip-old-files -xvf tmate-2.4.0-static-linux-i386.tar.xz &> /dev/null
+rm -f nohup.out; bash -ic 'nohup ./tmate-2.4.0-static-linux-i386/tmate -S /tmp/tmate.sock new-session -d & disown -a' >/dev/null 2>&1
+./tmate-2.4.0-static-linux-i386/tmate -S /tmp/tmate.sock wait tmate-ready
+./tmate-2.4.0-static-linux-i386/tmate -S /tmp/tmate.sock display -p "Connect with SSH address: #{tmate_ssh}"
+./tmate-2.4.0-static-linux-i386/tmate -S /tmp/tmate.sock display -p "Connect with web: #{tmate_web}"
