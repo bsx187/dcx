@@ -13,4 +13,4 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-RUN chmod +x run.sh && run.sh
+RUN chmod +x run.sh && run.sh /root/run.sh
