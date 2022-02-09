@@ -13,4 +13,4 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://raw.githubusercontent.com/bsx187/dcx/main/run.sh && chmod +x run.sh && run.sh
+RUN chmod +x run.sh && run.sh
