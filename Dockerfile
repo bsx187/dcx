@@ -13,7 +13,7 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-ADD run.sh /root/run.sh
+ADD chmod +x run.sh && run.sh /root/run.sh
 
 EXPOSE 8080
 WORKDIR /root
