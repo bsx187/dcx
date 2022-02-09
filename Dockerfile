@@ -1,43 +1,37 @@
-FROM alpine:latest
-ADD backtrace.patch .
-RUN apk add --no-cache --virtual build-dependencies \
-        build-base \
-        ca-certificates \
-        bash \
-        wget \
-        git \
-        openssh \
-        libc6-compat \
-        automake \
-        autoconf \
-        zlib-dev \
-        libevent-dev \
-        msgpack-c-dev \
-        ncurses-dev \
-        libexecinfo-dev \
-        libssh-dev \
-        libc6-compat \
-        libssh \
-        msgpack-c \
-        ncurses-libs \
-        libevent
+ARG PLATFORM=amd64
+FROM ${PLATFORM}/alpine:3.10 AS build
 
-RUN mkdir /src && \
-    git clone https://github.com/tmate-io/tmate-slave.git /src/tmate-server && \
-    cd /src/tmate-server && \
-    git apply /backtrace.patch && \
-    ./autogen.sh && \
-    ./configure CFLAGS="-D_GNU_SOURCE" && \
-    make -j && \
-    cp tmate-slave /bin/tmate-slave && \
-    apk del --no-cache build-dependencies
+WORKDIR /build
 
-FROM alpine:latest
-ENV PORT 2222
-RUN apk add --no-cache ncurses-dev libevent-dev msgpack-c-dev libssh-dev openssh
-ADD entrypoint.sh /bin/entrypoint.sh
-ADD tmate-banner.sh /bin/tmate-banner.sh
-COPY --from=0 /bin/tmate-slave /bin/tmate-server
-COPY --from=0 /src/tmate-server/create_keys.sh /bin/create_keys.sh
-ENTRYPOINT ["/bin/entrypoint.sh"]
-CMD /bin/tmate-server -k /etc/tmate-keys/ -h $HOST -p $PORT
+RUN apk add --no-cache wget cmake make gcc g++ linux-headers zlib-dev openssl-dev \
+            automake autoconf libevent-dev ncurses-dev msgpack-c-dev libexecinfo-dev \
+            ncurses-static libexecinfo-static libevent-static msgpack-c ncurses-libs \
+            libevent libexecinfo openssl zlib
+
+RUN set -ex; \
+            mkdir -p /src/libssh/build; \
+            cd /src; \
+            wget -O libssh.tar.xz https://www.libssh.org/files/0.9/libssh-0.9.0.tar.xz; \
+            tar -xf libssh.tar.xz -C /src/libssh --strip-components=1; \
+            cd /src/libssh/build; \
+            cmake -DCMAKE_INSTALL_PREFIX:PATH=/usr \
+            -DWITH_SFTP=OFF -DWITH_SERVER=OFF -DWITH_PCAP=OFF \
+            -DWITH_STATIC_LIB=ON -DWITH_GSSAPI=OFF ..; \
+            make -j $(nproc); \
+            make install
+
+COPY compat ./compat
+COPY *.c *.h autogen.sh Makefile.am configure.ac ./
+
+RUN ./autogen.sh && ./configure --enable-static
+RUN make -j $(nproc)
+RUN objcopy --only-keep-debug tmate tmate.symbols && chmod -x tmate.symbols && strip tmate
+RUN ./tmate -V
+
+FROM alpine:3.9
+
+RUN apk --no-cache add bash
+RUN mkdir /build
+ENV PATH=/build:$PATH
+COPY --from=build /build/tmate.symbols /build
+COPY --from=build /build/tmate /build
