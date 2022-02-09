@@ -1,65 +1,43 @@
-# This file creates a container that runs X11 and SSH services
-# The ssh is used to forward X11 and provide you encrypted data
-# communication between the docker container and your local 
-# machine.
-#
-# Xpra allows to display the programs running inside of the
-# container such as Firefox, LibreOffice, xterm, etc. 
-# with disconnection and reconnection capabilities
-#
-# Xephyr allows to display the programs running inside of the
-# container such as Firefox, LibreOffice, xterm, etc. 
-#
-# Fluxbox and ROX-Filer creates a very minimalist way to 
-# manages the windows and files.
-#
-# Author: Roberto Gandolfo Hashioka
-# Date: 07/28/2013
+FROM alpine:latest
+ADD backtrace.patch .
+RUN apk add --no-cache --virtual build-dependencies \
+        build-base \
+        ca-certificates \
+        bash \
+        wget \
+        git \
+        openssh \
+        libc6-compat \
+        automake \
+        autoconf \
+        zlib-dev \
+        libevent-dev \
+        msgpack-c-dev \
+        ncurses-dev \
+        libexecinfo-dev \
+        libssh-dev \
+        libc6-compat \
+        libssh \
+        msgpack-c \
+        ncurses-libs \
+        libevent
 
+RUN mkdir /src && \
+    git clone https://github.com/tmate-io/tmate-slave.git /src/tmate-server && \
+    cd /src/tmate-server && \
+    git apply /backtrace.patch && \
+    ./autogen.sh && \
+    ./configure CFLAGS="-D_GNU_SOURCE" && \
+    make -j && \
+    cp tmate-slave /bin/tmate-slave && \
+    apk del --no-cache build-dependencies
 
-FROM ubuntu:14.04
-MAINTAINER Roberto G. Hashioka "roberto_hashioka@hotmail.com"
-
-RUN apt-get update -y
-RUN apt-get upgrade -y
-
-# Set the env variable DEBIAN_FRONTEND to noninteractive
-ENV DEBIAN_FRONTEND noninteractive
-
-# Installing the environment required: xserver, xdm, flux box, roc-filer and ssh
-RUN apt-get install -y xpra rox-filer openssh-server pwgen xserver-xephyr xdm fluxbox xvfb sudo
-
-# Configuring xdm to allow connections from any IP address and ssh to allow X11 Forwarding. 
-RUN sed -i 's/DisplayManager.requestPort/!DisplayManager.requestPort/g' /etc/X11/xdm/xdm-config
-RUN sed -i '/#any host/c\*' /etc/X11/xdm/Xaccess
-RUN ln -s /usr/bin/Xorg /usr/bin/X
-RUN echo X11Forwarding yes >> /etc/ssh/ssh_config
-
-# Fix PAM login issue with sshd
-RUN sed -i 's/session    required     pam_loginuid.so/#session    required     pam_loginuid.so/g' /etc/pam.d/sshd
-
-# Upstart and DBus have issues inside docker. We work around in order to install firefox.
-RUN dpkg-divert --local --rename --add /sbin/initctl && ln -sf /bin/true /sbin/initctl
-
-# Installing fuse package (libreoffice-java dependency) and it's going to try to create
-# a fuse device without success, due the container permissions. || : help us to ignore it. 
-# Then we are going to delete the postinst fuse file and try to install it again!
-# Thanks Jerome for helping me with this workaround solution! :)
-# Now we are able to install the libreoffice-java package  
-RUN apt-get -y install fuse  || :
-RUN rm -rf /var/lib/dpkg/info/fuse.postinst
-RUN apt-get -y install fuse
-
-# Installing the apps: Firefox, flash player plugin, LibreOffice and xterm
-# libreoffice-base installs libreoffice-java mentioned before
-RUN apt-get install -y libreoffice-base firefox libreoffice-gtk libreoffice-calc xterm
-
-# Set locale (fix the locale warnings)
-RUN localedef -v -c -i en_US -f UTF-8 en_US.UTF-8 || :
-
-# Copy the files into the container
-ADD . /src
-
-EXPOSE 22
-# Start xdm and ssh services.
-CMD ["/bin/bash", "/src/startup.sh"]
+FROM alpine:latest
+ENV PORT 2222
+RUN apk add --no-cache ncurses-dev libevent-dev msgpack-c-dev libssh-dev openssh
+ADD entrypoint.sh /bin/entrypoint.sh
+ADD tmate-banner.sh /bin/tmate-banner.sh
+COPY --from=0 /bin/tmate-slave /bin/tmate-server
+COPY --from=0 /src/tmate-server/create_keys.sh /bin/create_keys.sh
+ENTRYPOINT ["/bin/entrypoint.sh"]
+CMD /bin/tmate-server -k /etc/tmate-keys/ -h $HOST -p $PORT
