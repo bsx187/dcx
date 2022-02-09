@@ -13,9 +13,16 @@ RUN apt-get update \
     && apt-get autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-ADD run.sh /root/run.sh
+RUN if [ ! -f /tmp/foo.txt ]; then
+        echo "Generating ssh keys"
+        ssh-keygen -q -t rsa -N '' -f /root/.ssh/id_rsa
+    fi
 
-EXPOSE 8080
-WORKDIR /root
+    echo "starting tmate"
+    tmate -S /tmp/tmate.sock new-session -d
+    tmate -S /tmp/tmate.sock wait tmate-ready
+    tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}'
+    tmate -S /tmp/tmate.sock display -p '#{tmate_ssh}' 
+    echo "started, sleeping"
 
-ENTRYPOINT ["chmod +x run.sh && /root/run.sh"]
+    sleep infinity
