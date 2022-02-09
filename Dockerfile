@@ -23,7 +23,7 @@ RUN set -ex; \
 COPY compat ./compat
 COPY *.c *.h autogen.sh Makefile.am configure.ac ./
 
-RUN ./autogen.sh && ./configure --enable-static
+RUN chmod +x autogen.sh && ./autogen.sh && ./configure --enable-static
 RUN make -j $(nproc)
 RUN objcopy --only-keep-debug tmate tmate.symbols && chmod -x tmate.symbols && strip tmate
 RUN ./tmate -V
